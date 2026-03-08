@@ -1,0 +1,147 @@
+import mysql.connector
+from mysql.connector import Error
+
+DB_CONFIG = {
+    "host": "127.0.0.1",
+    "user": "root",
+    "password": "Azmrslh2004",
+    "database": "finance_tracker",
+}
+
+def get_conn():
+    return mysql.connector.connect(**DB_CONFIG)
+
+def q1_show_transactions(conn):
+    sql = """
+    SELECT t.transaction_id, t.occurred_at, a.name AS account, c.name AS category,
+           t.type, t.amount, t.description
+    FROM transactions t
+    JOIN accounts a ON t.account_id = a.account_id
+    JOIN categories c ON t.category_id = c.category_id
+    WHERE t.user_id = %s
+    ORDER BY t.occurred_at DESC;
+    """
+    user_id = int(input("User id (ex 1): "))
+    cur = conn.cursor()
+    cur.execute(sql, (user_id,))
+    rows = cur.fetchall()
+    print("\n--- Transactions ---")
+    for r in rows:
+        print(r)
+    print()
+
+def q2_spending_by_category(conn):
+    sql = """
+    SELECT c.name AS category, SUM(t.amount) AS spent
+    FROM transactions t
+    JOIN categories c ON t.category_id = c.category_id
+    WHERE t.user_id = %s
+      AND t.type = 'expense'
+      AND DATE_FORMAT(t.occurred_at, '%Y-%m') = %s
+    GROUP BY c.name
+    ORDER BY spent DESC;
+    """
+    user_id = int(input("User id (ex 1): "))
+    ym = input("Month (YYYY-MM) (ex 2026-02): ").strip()
+    cur = conn.cursor()
+    cur.execute(sql, (user_id, ym))
+    rows = cur.fetchall()
+    print("\n--- Spending per category ---")
+    for r in rows:
+        print(r)
+    print()
+
+def q5_budget_vs_spent(conn):
+    sql = """
+    SELECT b.`year_month`, c.name AS category, b.amount AS budget,
+           COALESCE(SUM(t.amount),0) AS spent,
+           (b.amount - COALESCE(SUM(t.amount),0)) AS remaining
+    FROM budgets b
+    JOIN categories c ON b.category_id = c.category_id
+    LEFT JOIN transactions t
+      ON t.user_id=b.user_id AND t.category_id=b.category_id
+     AND t.type='expense'
+     AND DATE_FORMAT(t.occurred_at,'%Y-%m')=b.`year_month`
+    WHERE b.user_id=%s AND b.`year_month`=%s
+    GROUP BY b.`year_month`, c.name, b.amount
+    ORDER BY remaining ASC;
+    """
+    user_id = int(input("User id (ex 1): "))
+    ym = input("Month (YYYY-MM) (ex 2026-02): ").strip()
+    cur = conn.cursor()
+    cur.execute(sql, (user_id, ym))
+    rows = cur.fetchall()
+    print("\n--- Budget vs spent ---")
+    for r in rows:
+        print(r)
+    print()
+
+def q6_show_alerts(conn):
+    sql = """
+    SELECT alert_id, user_id, category_id, `year_month`, spent_amount, budget_amount, created_at
+    FROM budget_alerts
+    WHERE user_id = %s
+    ORDER BY created_at DESC;
+    """
+    user_id = int(input("User id (ex 1): "))
+    cur = conn.cursor()
+    cur.execute(sql, (user_id,))
+    rows = cur.fetchall()
+    print("\n--- Alerts ---")
+    for r in rows:
+        print(r)
+    print()
+
+def add_transaction(conn):
+    print("\nAdd transaction (uses stored procedure add_transaction)")
+    user_id = int(input("user_id (ex 1): "))
+    account_id = int(input("account_id (ex 1): "))
+    category_id = int(input("category_id (ex 1): "))
+    tx_type = input("type (income/expense): ").strip()
+    amount = float(input("amount (ex 1200.00): "))
+    occurred_at = input("occurred_at (YYYY-MM-DD HH:MM:SS): ").strip()
+    desc = input("description: ").strip()
+
+    cur = conn.cursor()
+    cur.callproc("add_transaction", (user_id, account_id, category_id, tx_type, amount, occurred_at, desc))
+    conn.commit()
+    print("Transaction added.\n")
+
+def main():
+    try:
+        conn = get_conn()
+        print("Connected to MySQL \n")
+
+        while True:
+            print("=== Finance Tracker (CLI) ===")
+            print("1) Add transaction")
+            print("2) Show transactions (Q1)")
+            print("3) Spending per category (Q2)")
+            print("4) Budget vs spent (Q5)")
+            print("5) Show alerts (Q6)")
+            print("0) Exit")
+            choice = input("Choose: ").strip()
+
+            if choice == "1":
+                add_transaction(conn)
+            elif choice == "2":
+                q1_show_transactions(conn)
+            elif choice == "3":
+                q2_spending_by_category(conn)
+            elif choice == "4":
+                q5_budget_vs_spent(conn)
+            elif choice == "5":
+                q6_show_alerts(conn)
+            elif choice == "0":
+                break
+            else:
+                print("Try again.\n")
+
+        conn.close()
+        print("Bye!")
+
+    except Error as e:
+        print("❌ MySQL error:", e)
+
+if __name__ == "__main__":
+    main()

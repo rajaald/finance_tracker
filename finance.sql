@@ -108,7 +108,8 @@ INSERT INTO categories (name) VALUES
 ('Rent'),
 ('Transport'),
 ('Subscriptions'),
-('Entertainment');
+('Entertainment'),
+('Salary');
 
 INSERT INTO budgets (user_id, category_id, `year_month`, amount)
 VALUES (
@@ -204,7 +205,7 @@ CALL add_transaction(
 CALL add_transaction(
   1,
   (SELECT account_id FROM accounts WHERE user_id=1 AND name='Debit Card' LIMIT 1),
-  (SELECT category_id FROM categories WHERE name='Rent' LIMIT 1),
+(SELECT category_id FROM categories WHERE name='Salary' LIMIT 1),
   'income',
   15000.00,
   '2026-02-01 09:00:00',
@@ -243,7 +244,7 @@ SELECT a.name AS account,
 FROM accounts a
 LEFT JOIN transactions t ON t.account_id = a.account_id
 WHERE a.user_id = 1
-GROUP BY a.name
+GROUP BY a.account_id, a.name
 ORDER BY balance DESC;
 
 SELECT b.`year_month`, c.name AS category, b.amount AS budget,

@@ -132,7 +132,16 @@ CREATE PROCEDURE add_transaction(
   IN p_description VARCHAR(255)
 )
 BEGIN
-  IF p_type NOT IN ('income','expense') THEN
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'amount must be positive';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM accounts
+                 WHERE account_id = p_account_id AND user_id = p_user_id) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'account must belong to user';
+  END IF;
+
+  IF p_type IS NULL OR p_type NOT IN ('income','expense') THEN
     SIGNAL SQLSTATE '45000'
       SET MESSAGE_TEXT = 'type must be income or expense';
   END IF;
@@ -212,6 +221,25 @@ CALL add_transaction(
   'Salary'
 );
 
+-- Additional demonstration data (January and March 2026).
+-- February 2026 is unchanged, so the demo results in the report still hold.
+INSERT INTO budgets (user_id, category_id, `year_month`, amount) VALUES
+(1, (SELECT category_id FROM categories WHERE name='Food' LIMIT 1),      '2026-01', 2500.00),
+(1, (SELECT category_id FROM categories WHERE name='Transport' LIMIT 1), '2026-01', 800.00);
+
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Salary' LIMIT 1),        'income',  15000.00, '2026-01-01 09:00:00', 'Salary');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Rent' LIMIT 1),          'expense',  5200.00, '2026-01-02 10:00:00', 'Rent January');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Food' LIMIT 1),          'expense',   950.00, '2026-01-06 17:45:00', 'Groceries');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Food' LIMIT 1),          'expense',   780.00, '2026-01-19 18:10:00', 'Groceries');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Transport' LIMIT 1),     'expense',   690.00, '2026-01-03 08:15:00', 'Monthly bus card');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Subscriptions' LIMIT 1), 'expense',   129.00, '2026-01-10 12:00:00', 'Music streaming');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Entertainment' LIMIT 1), 'expense',   340.00, '2026-01-24 21:00:00', 'Cinema');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Salary' LIMIT 1),        'income',  15000.00, '2026-03-01 09:00:00', 'Salary');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Rent' LIMIT 1),          'expense',  5200.00, '2026-03-02 10:00:00', 'Rent March');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Food' LIMIT 1),          'expense',  1100.00, '2026-03-08 16:30:00', 'Groceries');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Transport' LIMIT 1),     'expense',   690.00, '2026-03-03 08:15:00', 'Monthly bus card');
+CALL add_transaction(1, 1, (SELECT category_id FROM categories WHERE name='Subscriptions' LIMIT 1), 'expense',   129.00, '2026-03-10 12:00:00', 'Music streaming');
+
 
 SELECT t.transaction_id, t.occurred_at, a.name AS account, c.name AS category,
        t.type, t.amount, t.description
@@ -260,9 +288,11 @@ WHERE b.user_id=1 AND b.`year_month`='2026-02'
 GROUP BY b.`year_month`, c.name, b.amount
 ORDER BY remaining ASC;
 
-SELECT *
-FROM budget_alerts
-WHERE user_id = 1
-ORDER BY created_at DESC;
+SELECT ba.alert_id, c.name AS category, ba.`year_month`,
+       ba.spent_amount, ba.budget_amount, ba.created_at
+FROM budget_alerts ba
+JOIN categories c ON ba.category_id = c.category_id
+WHERE ba.user_id = 1
+ORDER BY ba.created_at DESC;
 
 SHOW TABLES;

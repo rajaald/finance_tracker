@@ -5,7 +5,7 @@ from mysql.connector import Error
 DB_CONFIG = {
     "host": "127.0.0.1",
     "user": "root",
-    "password": "YOUR_PASSWORD",
+    "password": "finance123",
     "database": "finance_tracker",
 }
 
